@@ -1,0 +1,37 @@
+version: "3.7"
+
+services:
+  prizma-db:
+    image: mysql:5.7
+    command: mysqld --character-set-server=utf8 --collation-server=utf8_unicode_ci
+    ports:
+      - 23306:3306
+    volumes:
+      - ./data/lab-prizma-db-data:/var/lib/mysql
+    environment:
+      MYSQL_DATABASE: prizma
+      MYSQL_ROOT_PASSWORD: root
+    restart: always
+
+  prizma-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+      args:
+        GITLAB_HOST: ${GITLAB_HOST}
+        GITLAB_TOKEN: ${GITLAB_TOKEN}
+      target: dev
+    volumes:
+      - .:/app:delegated
+    ports:
+      - 20080:80
+    depends_on:
+      - prizma-db
+    links:
+      - prizma-db
+
+  uprza-api:
+    image: analys:1.5
+    restart: always
+    ports:
+      - 5000:80

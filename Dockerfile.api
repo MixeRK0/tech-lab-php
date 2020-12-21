@@ -1,0 +1,52 @@
+FROM yiisoftware/yii2-php:7.3-apache as base
+
+ENV ACCEPT_EULA=Y
+
+# Microsoft SQL Server Prerequisites
+RUN curl https://packages.microsoft.com/keys/microsoft.asc \
+        | apt-key add - \
+    && curl https://packages.microsoft.com/config/debian/9/prod.list \
+        > /etc/apt/sources.list.d/mssql-release.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        apt-transport-https \
+        unixodbc-dev \
+        msodbcsql17 \
+        libldap2-dev \
+        vim \
+    && rm -rf /var/lib/apt/lists/* \
+    && pecl install sqlsrv-5.8.1 \
+    && pecl install pdo_sqlsrv-5.8.1 \
+    && docker-php-ext-configure ldap --with-libdir=lib/x86_64-linux-gnu/ \
+    && docker-php-ext-install ldap \
+    && docker-php-ext-enable sqlsrv pdo_sqlsrv
+
+ARG GITLAB_HOST
+ARG GITLAB_TOKEN
+
+RUN composer config --global gitlab-token.${GITLAB_HOST} ${GITLAB_TOKEN}
+
+WORKDIR /app
+
+# Change document root for Apache
+RUN sed -i -e 's|/app/web|/app/frontend/web|g' /etc/apache2/sites-available/000-default.conf
+
+FROM base as dev
+RUN echo 'Done'
+
+FROM base as prod
+COPY composer.lock .
+COPY composer.json .
+RUN composer install --no-progress --no-dev
+
+COPY requirements.php requirements.php
+RUN php requirements.php
+
+COPY init init
+COPY environments environments
+RUN php init --overwrite=y --env=Docker
+RUN chown www-data:www-data -R .
+
+COPY common common
+COPY frontend frontend
+COPY modules modules
